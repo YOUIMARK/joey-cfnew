@@ -1,4 +1,4 @@
-# joey-cfnew 每日同步镜像
+# byJoey/cfnew 每日同步镜像
 
 本仓库每日自动同步上游 [byJoey/cfnew](https://github.com/byJoey/cfnew)，始终保持最新版本。
 
