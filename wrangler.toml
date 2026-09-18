@@ -2,3 +2,7 @@ name = "joey"
 main = "_worker.js"
 compatibility_date = "2026-01-20"
 keep_vars = true
+
+[[kv_namespaces]]
+binding = "C"
+id = "dc4d5953be0941e7a76f1644546408e2"
