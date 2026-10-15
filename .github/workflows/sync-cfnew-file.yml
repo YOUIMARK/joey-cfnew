@@ -30,7 +30,7 @@ jobs:
           node-version: '22'
 
       - name: Install Obfuscator
-        run: npm install javascript-obfuscator
+        run: npm install javascript-obfuscator@5.9.0
 
       - name: Download and overwrite files
         run: |
@@ -59,27 +59,35 @@ jobs:
             process.exit(1);
           }
 
+          // 针对 Cloudflare Workers 的实测约束（勿随意放开）：
+          //   1. deadCodeInjection: true 会让 wrangler/esbuild 打包直接失败
+          //      （Build failed: Cannot assign to "X" because it is a constant）。
+          //   2. selfDefending: true 会被 Workers 运行时的二次压缩破坏完整性自校验，
+          //      表现为 worker 启动后挂死、请求永不返回。
+          //   其余强度参数已按实测结果提高：控制流平坦化 0.5、字符串数组包装 3 层并链式调用、
+          //   数字转表达式、simplify 等。
           const obfuscationOptions = {
             compact: true,
-            controlFlowFlattening: false,
+            controlFlowFlattening: true,
+            controlFlowFlatteningThreshold: 0.5,
             deadCodeInjection: false,
             stringArray: true,
             stringArrayEncoding: ['base64'],
             stringArrayThreshold: 1.0,
             stringArrayRotate: true,
             stringArrayShuffle: true,
-            stringArrayWrappersCount: 2,
-            stringArrayWrappersChainedCalls: false,
-            stringArrayWrappersParametersMaxCount: 3,
+            stringArrayWrappersCount: 3,
+            stringArrayWrappersChainedCalls: true,
+            stringArrayWrappersParametersMaxCount: 4,
             renameGlobals: false,
             identifierNamesGenerator: 'mangled-shuffled',
             ignoreImports: true,
             target: 'browser-no-eval',
-            numbersToExpressions: false,
-            simplify: false,
+            numbersToExpressions: true,
+            simplify: true,
             splitStrings: true,
             splitStringsChunkLength: 3,
-            transformObjectKeys: false,
+            transformObjectKeys: true,
             unicodeEscapeSequence: true,
             selfDefending: false,
             debugProtection: false,
@@ -91,6 +99,13 @@ jobs:
           try {
             console.log('开始混淆...');
             const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
+
+            // 产物自检：_worker.js 必须仍是合法 ESM 入口，否则宁可不提交。
+            if (!obfuscatedCode.includes('export default')) {
+              console.error('错误：混淆产物缺少 "export default"，疑似被破坏，已中止。');
+              process.exit(1);
+            }
+
             fs.writeFileSync(path.join(process.cwd(), outputFileName), obfuscatedCode, 'utf8');
             const originalSize = Buffer.byteLength(originalCode, 'utf8');
             const obfuscatedSize = Buffer.byteLength(obfuscatedCode, 'utf8');
